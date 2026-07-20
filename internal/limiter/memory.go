@@ -16,3 +16,11 @@ type FixedWindow struct {
 	window   time.Duration
 	requests map[string]*windowState
 }
+
+func NewFixedWindow(limit int, window time.Duration) *FixedWindow {
+	return &FixedWindow{
+		limit:    limit,
+		window:   window,
+		requests: make(map[string]*windowState),
+	}
+}
