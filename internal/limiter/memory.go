@@ -1,7 +1,6 @@
 package limiter
 
 import (
-	"errors"
 	"sync"
 	"time"
 )
@@ -41,7 +40,7 @@ func (f *FixedWindow) Allow(key string) (bool, error) {
 	}
 
 	if state.counter >= f.limit {
-		return false, errors.New("You have hit the limit, try again later")
+		return false, nil
 	}
 	state.counter++
 	return true, nil
