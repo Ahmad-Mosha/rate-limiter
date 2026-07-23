@@ -1,6 +1,7 @@
 package limiter
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -56,4 +57,33 @@ func TestWindowExpiry(t *testing.T) {
 		t.Errorf("expected request to be allowed after window reset, got denied")
 	}
 
+}
+
+func TestFixedWindow_Concurrent(t *testing.T) {
+	fw := NewFixedWindow(5, time.Second)
+
+	results := make([]bool, 20)
+	var wg sync.WaitGroup
+
+	for i := range 20 {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			allowed, _ := fw.Allow("same-key")
+			results[index] = allowed
+		}(i)
+	}
+
+	wg.Wait()
+
+	allowedCount := 0
+	for _, wasAllowed := range results {
+		if wasAllowed {
+			allowedCount++
+		}
+	}
+
+	if allowedCount != 5 {
+		t.Errorf("expected exactly 5 allowed requests, got %d", allowedCount)
+	}
 }
