@@ -37,10 +37,13 @@ func (b *Bucket) Allow(key string) (bool, error) {
 	b.buckets[key] = state
 	elapsed := time.Since(state.lastRefillTime).Seconds()
 	tokensToadd := elapsed * b.refillRate
-	state.tokens += tokensToadd
-	if state.tokens > b.capacity {
-		state.tokens = b.capacity
-	}
+	// this is not idiomatic
+	// state.tokens += tokensToadd
+	// if state.tokens > b.capacity {
+	// 	state.tokens = b.capacity
+	// }
+	// Idiomatic version ->
+	state.tokens = min(state.tokens+tokensToadd, b.capacity)
 	state.lastRefillTime = time.Now()
 	if state.tokens >= 1 {
 		state.tokens -= 1
