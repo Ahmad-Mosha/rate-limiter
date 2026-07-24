@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+var _ RateLimiter = (*FixedWindow)(nil)
+
 type windowState struct {
 	counter   int // counter of requests per window
 	startTime time.Time
