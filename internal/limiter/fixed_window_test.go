@@ -12,10 +12,10 @@ func TestFixedWindow_FirstRequestAllowed(t *testing.T) {
 	allowed, err := fw.Allow("user1")
 
 	if err != nil {
-		t.Errorf("expcted no error , got %v", err)
+		t.Errorf("expected no error, got %v", err)
 	}
 	if !allowed {
-		t.Errorf("expected fisrt request to be allowed, got denied")
+		t.Errorf("expected first request to be allowed, got denied")
 	}
 }
 
@@ -25,7 +25,7 @@ func TestFixedWindow(t *testing.T) {
 	for i, want := range expected {
 		allowed, err := fw.Allow("user1")
 		if err != nil {
-			t.Errorf("request %d: got unexptected error: %v", i+1, err)
+			t.Errorf("request %d: got unexpected error: %v", i+1, err)
 		}
 		if allowed != want {
 			t.Errorf("request %d: expected allowed =%v, got %v", i+1, want, allowed)
@@ -40,7 +40,7 @@ func TestWindowExpiry(t *testing.T) {
 	for i, want := range expected {
 		allowed, err := fw.Allow("user1")
 		if err != nil {
-			t.Errorf("request %d: got unexptected error: %v", i+1, err)
+			t.Errorf("request %d: got unexpected error: %v", i+1, err)
 		}
 		if allowed != want {
 			t.Errorf("request %d: expected allowed =%v, got %v", i+1, want, allowed)
