@@ -46,5 +46,4 @@ func (f *FixedWindow) Allow(key string) (bool, error) {
 	}
 	state.counter++
 	return true, nil
-
 }
