@@ -1,0 +1,122 @@
+package middleware
+
+import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/ahmad-mosha/go-rate-limiter/internal/limiter"
+)
+
+// mockLimiter is a simple test double that implements limiter.RateLimiter.
+// It returns the pre-configured allowed and err values on every call,
+// and records the key it was called with.
+type mockLimiter struct {
+	allowed bool
+	err     error
+	lastKey string
+}
+
+// compile-time check: mockLimiter must satisfy the RateLimiter interface.
+var _ limiter.RateLimiter = (*mockLimiter)(nil)
+
+func (m *mockLimiter) Allow(key string) (bool, error) {
+	m.lastKey = key
+	return m.allowed, m.err
+}
+
+// dummyHandler is the "next" handler behind the middleware.
+// It writes 200 OK with a body so tests can verify it was reached.
+func dummyHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("passed"))
+}
+
+func TestRateLimiterMiddleware_AllowedRequest(t *testing.T) {
+	mock := &mockLimiter{allowed: true}
+	handler := RateLimiterMiddleware(mock, http.HandlerFunc(dummyHandler))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if rr.Body.String() != "passed" {
+		t.Errorf("expected body %q, got %q", "passed", rr.Body.String())
+	}
+}
+
+func TestRateLimiterMiddleware_DeniedRequest(t *testing.T) {
+	mock := &mockLimiter{allowed: false}
+	handler := RateLimiterMiddleware(mock, http.HandlerFunc(dummyHandler))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Errorf("expected status %d, got %d", http.StatusTooManyRequests, rr.Code)
+	}
+}
+
+func TestRateLimiterMiddleware_LimiterError(t *testing.T) {
+	mock := &mockLimiter{allowed: false, err: errors.New("storage failure")}
+	handler := RateLimiterMiddleware(mock, http.HandlerFunc(dummyHandler))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+}
+
+func TestRateLimiterMiddleware_IPExtraction(t *testing.T) {
+	mock := &mockLimiter{allowed: true}
+	handler := RateLimiterMiddleware(mock, http.HandlerFunc(dummyHandler))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.5:9999"
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if mock.lastKey != "10.0.0.5" {
+		t.Errorf("expected key %q, got %q", "10.0.0.5", mock.lastKey)
+	}
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+}
+
+func TestRateLimiterMiddleware_IPExtractionNoPort(t *testing.T) {
+	mock := &mockLimiter{allowed: true}
+	handler := RateLimiterMiddleware(mock, http.HandlerFunc(dummyHandler))
+
+	// RemoteAddr without a port — net.SplitHostPort will error,
+	// so the middleware should fall back to using the raw value.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.5"
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if mock.lastKey != "10.0.0.5" {
+		t.Errorf("expected key %q, got %q", "10.0.0.5", mock.lastKey)
+	}
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+}
