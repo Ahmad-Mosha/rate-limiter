@@ -1,22 +1,15 @@
 package main
 
 import (
-	"net/http"
+	"log"
 	"time"
 
 	"github.com/ahmad-mosha/go-rate-limiter/internal/limiter"
-	"github.com/ahmad-mosha/go-rate-limiter/internal/middleware"
+	"github.com/ahmad-mosha/go-rate-limiter/internal/server"
 )
 
-func helloHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Hello, world!"))
-
-}
-
 func main() {
-	fixedWindow := limiter.NewFixedWindow(10, time.Minute)
-	wrappedHandler := middleware.RateLimiterMiddleware(fixedWindow, http.HandlerFunc(helloHandler))
-	http.Handle("/", wrappedHandler)
-	http.ListenAndServe(":8080", nil)
-
+	rateLimiter := limiter.NewFixedWindow(10, time.Minute)
+	srv := server.New(rateLimiter)
+	log.Fatal(srv.Start(":8080"))
 }
