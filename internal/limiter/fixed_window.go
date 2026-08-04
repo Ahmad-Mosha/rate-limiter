@@ -1,6 +1,7 @@
 package limiter
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -27,7 +28,7 @@ func NewFixedWindow(limit int, window time.Duration) *FixedWindow {
 	}
 }
 
-func (f *FixedWindow) Allow(key string) (bool, error) {
+func (f *FixedWindow) Allow(ctx context.Context, key string) (Result, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	state, exists := f.requests[key]
@@ -42,8 +43,15 @@ func (f *FixedWindow) Allow(key string) (bool, error) {
 	}
 
 	if state.counter >= f.limit {
-		return false, nil
+		return Result{
+			Allowed:    false,
+			Remaining:  0,
+			RetryAfter: f.window - elapsed,
+		}, nil
 	}
 	state.counter++
-	return true, nil
+	return Result{
+		Allowed:   true,
+		Remaining: f.limit - state.counter,
+	}, nil
 }
