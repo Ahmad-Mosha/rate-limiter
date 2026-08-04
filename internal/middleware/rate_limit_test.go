@@ -1,19 +1,21 @@
 package middleware
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ahmad-mosha/go-rate-limiter/internal/limiter"
 )
 
 // mockLimiter is a simple test double that implements limiter.RateLimiter.
-// It returns the pre-configured allowed and err values on every call,
+// It returns the pre-configured result and err values on every call,
 // and records the key it was called with.
 type mockLimiter struct {
-	allowed bool
+	result  limiter.Result
 	err     error
 	lastKey string
 }
@@ -21,9 +23,9 @@ type mockLimiter struct {
 // compile-time check: mockLimiter must satisfy the RateLimiter interface.
 var _ limiter.RateLimiter = (*mockLimiter)(nil)
 
-func (m *mockLimiter) Allow(key string) (bool, error) {
+func (m *mockLimiter) Allow(ctx context.Context, key string) (limiter.Result, error) {
 	m.lastKey = key
-	return m.allowed, m.err
+	return m.result, m.err
 }
 
 // dummyHandler is the "next" handler behind the middleware.
@@ -34,7 +36,7 @@ func dummyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestRateLimiterMiddleware_AllowedRequest(t *testing.T) {
-	mock := &mockLimiter{allowed: true}
+	mock := &mockLimiter{result: limiter.Result{Allowed: true, Remaining: 4}}
 	handler := RateLimiterMiddleware(mock, http.HandlerFunc(dummyHandler))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -49,10 +51,16 @@ func TestRateLimiterMiddleware_AllowedRequest(t *testing.T) {
 	if rr.Body.String() != "passed" {
 		t.Errorf("expected body %q, got %q", "passed", rr.Body.String())
 	}
+	if rr.Header().Get("X-RateLimit-Remaining") != "4" {
+		t.Errorf("expected X-RateLimit-Remaining %q, got %q", "4", rr.Header().Get("X-RateLimit-Remaining"))
+	}
+	if rr.Header().Get("Retry-After") != "" {
+		t.Errorf("expected no Retry-After header on allowed request, got %q", rr.Header().Get("Retry-After"))
+	}
 }
 
 func TestRateLimiterMiddleware_DeniedRequest(t *testing.T) {
-	mock := &mockLimiter{allowed: false}
+	mock := &mockLimiter{result: limiter.Result{Allowed: false, Remaining: 0, RetryAfter: 3 * time.Second}}
 	handler := RateLimiterMiddleware(mock, http.HandlerFunc(dummyHandler))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -64,10 +72,16 @@ func TestRateLimiterMiddleware_DeniedRequest(t *testing.T) {
 	if rr.Code != http.StatusTooManyRequests {
 		t.Errorf("expected status %d, got %d", http.StatusTooManyRequests, rr.Code)
 	}
+	if rr.Header().Get("X-RateLimit-Remaining") != "0" {
+		t.Errorf("expected X-RateLimit-Remaining %q, got %q", "0", rr.Header().Get("X-RateLimit-Remaining"))
+	}
+	if rr.Header().Get("Retry-After") != "3" {
+		t.Errorf("expected Retry-After %q, got %q", "3", rr.Header().Get("Retry-After"))
+	}
 }
 
 func TestRateLimiterMiddleware_LimiterError(t *testing.T) {
-	mock := &mockLimiter{allowed: false, err: errors.New("storage failure")}
+	mock := &mockLimiter{err: errors.New("storage failure")}
 	handler := RateLimiterMiddleware(mock, http.HandlerFunc(dummyHandler))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -82,7 +96,7 @@ func TestRateLimiterMiddleware_LimiterError(t *testing.T) {
 }
 
 func TestRateLimiterMiddleware_IPExtraction(t *testing.T) {
-	mock := &mockLimiter{allowed: true}
+	mock := &mockLimiter{result: limiter.Result{Allowed: true}}
 	handler := RateLimiterMiddleware(mock, http.HandlerFunc(dummyHandler))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -101,7 +115,7 @@ func TestRateLimiterMiddleware_IPExtraction(t *testing.T) {
 }
 
 func TestRateLimiterMiddleware_IPExtractionNoPort(t *testing.T) {
-	mock := &mockLimiter{allowed: true}
+	mock := &mockLimiter{result: limiter.Result{Allowed: true}}
 	handler := RateLimiterMiddleware(mock, http.HandlerFunc(dummyHandler))
 
 	// RemoteAddr without a port — net.SplitHostPort will error,
