@@ -1,6 +1,7 @@
 package limiter
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -27,7 +28,7 @@ func NewBucket(capacity float64, refillRate float64) *Bucket {
 	}
 }
 
-func (b *Bucket) Allow(key string) (bool, error) {
+func (b *Bucket) Allow(ctx context.Context, key string) (Result, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	state, exists := b.buckets[key]
@@ -41,8 +42,16 @@ func (b *Bucket) Allow(key string) (bool, error) {
 	state.lastRefillTime = time.Now()
 	if state.tokens >= 1 {
 		state.tokens -= 1
-		return true, nil
+		return Result{
+			Allowed:   true,
+			Remaining: int(state.tokens),
+		}, nil
 	}
-	return false, nil
+	secondsToWait := (1 - state.tokens) / b.refillRate
+	return Result{
+		Allowed:    false,
+		Remaining:  0,
+		RetryAfter: time.Duration(secondsToWait * float64(time.Second)),
+	}, nil
 
 }

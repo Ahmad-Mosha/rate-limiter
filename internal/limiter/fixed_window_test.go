@@ -1,6 +1,7 @@
 package limiter
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -9,13 +10,16 @@ import (
 func TestFixedWindow_FirstRequestAllowed(t *testing.T) {
 	fw := NewFixedWindow(3, time.Second)
 
-	allowed, err := fw.Allow("user1")
+	result, err := fw.Allow(context.Background(), "user1")
 
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
-	if !allowed {
+	if !result.Allowed {
 		t.Errorf("expected first request to be allowed, got denied")
+	}
+	if result.Remaining != 2 {
+		t.Errorf("expected 2 remaining, got %d", result.Remaining)
 	}
 }
 
@@ -23,40 +27,55 @@ func TestFixedWindow(t *testing.T) {
 	fw := NewFixedWindow(3, time.Second)
 	expected := []bool{true, true, true, false}
 	for i, want := range expected {
-		allowed, err := fw.Allow("user1")
+		result, err := fw.Allow(context.Background(), "user1")
 		if err != nil {
 			t.Errorf("request %d: got unexpected error: %v", i+1, err)
 		}
-		if allowed != want {
-			t.Errorf("request %d: expected allowed =%v, got %v", i+1, want, allowed)
+		if result.Allowed != want {
+			t.Errorf("request %d: expected allowed=%v, got %v", i+1, want, result.Allowed)
 		}
 	}
-
 }
 
 func TestWindowExpiry(t *testing.T) {
 	fw := NewFixedWindow(3, 50*time.Millisecond)
 	expected := []bool{true, true, true, false}
 	for i, want := range expected {
-		allowed, err := fw.Allow("user1")
+		result, err := fw.Allow(context.Background(), "user1")
 		if err != nil {
 			t.Errorf("request %d: got unexpected error: %v", i+1, err)
 		}
-		if allowed != want {
-			t.Errorf("request %d: expected allowed =%v, got %v", i+1, want, allowed)
+		if result.Allowed != want {
+			t.Errorf("request %d: expected allowed=%v, got %v", i+1, want, result.Allowed)
 		}
 	}
 	time.Sleep(60 * time.Millisecond)
 
-	// Phase 3: confirm a new window has started
-	allowed, err := fw.Allow("user1")
+	// confirm a new window has started
+	result, err := fw.Allow(context.Background(), "user1")
 	if err != nil {
 		t.Errorf("got unexpected error: %v", err)
 	}
-	if !allowed {
+	if !result.Allowed {
 		t.Errorf("expected request to be allowed after window reset, got denied")
 	}
+}
 
+func TestFixedWindow_DeniedRetryAfter(t *testing.T) {
+	fw := NewFixedWindow(1, time.Second)
+
+	// use up the single allowed request
+	fw.Allow(context.Background(), "user1")
+
+	// this one should be denied with a non-zero RetryAfter
+	result, _ := fw.Allow(context.Background(), "user1")
+
+	if result.Allowed {
+		t.Errorf("expected request to be denied")
+	}
+	if result.RetryAfter <= 0 {
+		t.Errorf("expected positive RetryAfter, got %v", result.RetryAfter)
+	}
 }
 
 func TestFixedWindow_Concurrent(t *testing.T) {
@@ -69,8 +88,8 @@ func TestFixedWindow_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
-			allowed, _ := fw.Allow("same-key")
-			results[index] = allowed
+			result, _ := fw.Allow(context.Background(), "same-key")
+			results[index] = result.Allowed
 		}(i)
 	}
 
