@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"math"
 	"net"
 	"net/http"
+	"strconv"
 
 	"github.com/ahmad-mosha/go-rate-limiter/internal/limiter"
 )
@@ -13,12 +15,15 @@ func RateLimiterMiddleware(limiter limiter.RateLimiter, next http.Handler) http.
 		if err != nil {
 			host = r.RemoteAddr
 		}
-		allowed, err := limiter.Allow(host)
+		result, err := limiter.Allow(r.Context(), host)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		if !allowed {
+		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(result.Remaining))
+		if !result.Allowed {
+			retrySeconds := int(math.Ceil(result.RetryAfter.Seconds()))
+			w.Header().Set("Retry-After", strconv.Itoa(retrySeconds))
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
