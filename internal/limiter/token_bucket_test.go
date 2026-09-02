@@ -9,6 +9,7 @@ import (
 
 func TestBucket_BasicExhaustion(t *testing.T) {
 	b := NewBucket(3, 1) // capacity 3, refill 1 token/sec
+	defer b.Stop()
 
 	expected := []bool{true, true, true, false}
 	for i, want := range expected {
@@ -25,6 +26,7 @@ func TestBucket_BasicExhaustion(t *testing.T) {
 func TestBucket_RefillOverTime(t *testing.T) {
 	// capacity 2, refill 20 tokens/sec -> refills fast so the test stays quick
 	b := NewBucket(2, 20)
+	defer b.Stop()
 
 	// drain the bucket
 	for i := 0; i < 2; i++ {
@@ -60,6 +62,7 @@ func TestBucket_RefillOverTime(t *testing.T) {
 
 func TestBucket_DeniedRetryAfter(t *testing.T) {
 	b := NewBucket(1, 10) // capacity 1, refill 10 tokens/sec
+	defer b.Stop()
 
 	// use up the single token
 	b.Allow(context.Background(), "user1")
@@ -77,6 +80,7 @@ func TestBucket_DeniedRetryAfter(t *testing.T) {
 
 func TestBucket_Concurrent(t *testing.T) {
 	b := NewBucket(5, 0) // capacity 5, no refill during the test
+	defer b.Stop()
 
 	results := make([]bool, 20)
 	var wg sync.WaitGroup
@@ -101,5 +105,25 @@ func TestBucket_Concurrent(t *testing.T) {
 
 	if allowedCount != 5 {
 		t.Errorf("expected exactly 5 allowed requests, got %d", allowedCount)
+	}
+}
+
+func TestBucket_EvictsIdleKeys(t *testing.T) {
+	// capacity 1, refill 100/sec -> timeToFull is well under the 1s floor,
+	// so the cleanup ticker runs once per second.
+	b := NewBucket(1, 100)
+	defer b.Stop()
+
+	b.Allow(context.Background(), "user1") // drains the bucket
+
+	// after ~1.2s the bucket has long since refilled and the sweep has run
+	time.Sleep(1200 * time.Millisecond)
+
+	b.mu.Lock()
+	got := len(b.buckets)
+	b.mu.Unlock()
+
+	if got != 0 {
+		t.Errorf("expected idle bucket to be evicted, still holding %d", got)
 	}
 }
