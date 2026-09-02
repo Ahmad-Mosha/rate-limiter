@@ -9,6 +9,7 @@ import (
 
 func TestFixedWindow_FirstRequestAllowed(t *testing.T) {
 	fw := NewFixedWindow(3, time.Second)
+	defer fw.Stop()
 
 	result, err := fw.Allow(context.Background(), "user1")
 
@@ -25,6 +26,7 @@ func TestFixedWindow_FirstRequestAllowed(t *testing.T) {
 
 func TestFixedWindow(t *testing.T) {
 	fw := NewFixedWindow(3, time.Second)
+	defer fw.Stop()
 	expected := []bool{true, true, true, false}
 	for i, want := range expected {
 		result, err := fw.Allow(context.Background(), "user1")
@@ -39,6 +41,7 @@ func TestFixedWindow(t *testing.T) {
 
 func TestWindowExpiry(t *testing.T) {
 	fw := NewFixedWindow(3, 50*time.Millisecond)
+	defer fw.Stop()
 	expected := []bool{true, true, true, false}
 	for i, want := range expected {
 		result, err := fw.Allow(context.Background(), "user1")
@@ -63,6 +66,7 @@ func TestWindowExpiry(t *testing.T) {
 
 func TestFixedWindow_DeniedRetryAfter(t *testing.T) {
 	fw := NewFixedWindow(1, time.Second)
+	defer fw.Stop()
 
 	// use up the single allowed request
 	fw.Allow(context.Background(), "user1")
@@ -80,6 +84,7 @@ func TestFixedWindow_DeniedRetryAfter(t *testing.T) {
 
 func TestFixedWindow_Concurrent(t *testing.T) {
 	fw := NewFixedWindow(5, time.Second)
+	defer fw.Stop()
 
 	results := make([]bool, 20)
 	var wg sync.WaitGroup
@@ -104,5 +109,24 @@ func TestFixedWindow_Concurrent(t *testing.T) {
 
 	if allowedCount != 5 {
 		t.Errorf("expected exactly 5 allowed requests, got %d", allowedCount)
+	}
+}
+
+func TestFixedWindow_EvictsIdleKeys(t *testing.T) {
+	fw := NewFixedWindow(3, 20*time.Millisecond)
+	defer fw.Stop()
+
+	fw.Allow(context.Background(), "user1")
+	fw.Allow(context.Background(), "user2")
+
+	// wait for a couple of cleanup ticks after both windows have elapsed
+	time.Sleep(80 * time.Millisecond)
+
+	fw.mu.Lock()
+	got := len(fw.requests)
+	fw.mu.Unlock()
+
+	if got != 0 {
+		t.Errorf("expected idle keys to be evicted, still holding %d", got)
 	}
 }
