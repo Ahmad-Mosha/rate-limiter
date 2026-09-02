@@ -1,0 +1,7 @@
+# build output
+/server
+/rate-limiter
+
+# test & coverage artifacts
+*.test
+*.out
