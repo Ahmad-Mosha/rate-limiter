@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"github.com/ahmad-mosha/go-rate-limiter/internal/limiter"
-	"github.com/ahmad-mosha/go-rate-limiter/internal/middleware"
+	"github.com/Ahmad-Mosha/rate-limiter/internal/limiter"
+	"github.com/Ahmad-Mosha/rate-limiter/internal/middleware"
 )
 
 // Server holds the HTTP mux and its dependencies.

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/ahmad-mosha/go-rate-limiter/internal/limiter"
+	"github.com/Ahmad-Mosha/rate-limiter/internal/limiter"
 )
 
 func RateLimiterMiddleware(limiter limiter.RateLimiter, next http.Handler) http.Handler {
