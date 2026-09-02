@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/ahmad-mosha/go-rate-limiter/internal/limiter"
-	"github.com/ahmad-mosha/go-rate-limiter/internal/server"
+	"github.com/Ahmad-Mosha/rate-limiter/internal/limiter"
+	"github.com/Ahmad-Mosha/rate-limiter/internal/server"
 	"github.com/redis/go-redis/v9"
 )
 
