@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/ahmad-mosha/go-rate-limiter/internal/limiter"
@@ -25,6 +24,5 @@ func New(rateLimiter limiter.RateLimiter) *Server {
 
 // Start begins listening on the given address.
 func (s *Server) Start(addr string) error {
-	fmt.Printf("server listening on %s\n", addr)
 	return http.ListenAndServe(addr, s.mux)
 }
